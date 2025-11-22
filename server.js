@@ -13,7 +13,7 @@ import { dirname, extname } from "path";
 
 // ---------- Initialisation ---------- \\
 
-const PORT = 8080;
+const PORT = 5000;
 const HOST = "0.0.0.0";
 const wss = new WebSocketServer({ port: PORT, host: HOST });
 
@@ -111,8 +111,43 @@ wss.on('connection', (ws, req) => {
         }
     });
     
-    ws.on('close', () => {
-        console.log(`Connection closed from ${req.socket.remoteAddress}`);
+    ws.on('close', (msg) => {
+        try {
+            const data = JSON.parse(msg);
+
+            // Find and device from lists
+            const deviceIndex = devices.findIndex(device => device.ws === ws);
+            if (deviceIndex !== -1) {
+                const device = devices[deviceIndex];
+            }
+            const type = device.type;
+
+            // Remove from type-specific list
+            switch (type) {
+                case "speaker":
+                    speakers = speakers.filter(dev => dev.ws !== ws);
+                    break;
+                case "camera":
+                    cameras = cameras.filter(dev => dev.ws !== ws);
+                    break;
+                case "light":
+                    lights = lights.filter(dev => dev.ws !== ws);
+                    break;
+            }
+
+            // Remove from general devices list
+            devices = devices.filter(dev => dev.ws !== ws);
+
+            console.log(`
+                Disconnected 
+                ${chalk.grey(type)}: 
+                [${chalk.red(device.id)}]
+            `);
+
+
+        } catch (err) {
+            console.error(`Error handling disconnection: ${chalk.red(err)}`);
+        }
     });
 })
 
