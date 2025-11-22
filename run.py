@@ -25,8 +25,8 @@ def loop():
         subprocess.run(["python", "src/client/speaker.py"])
     elif CHOICE == "4":
         print("\nServer selected")
-        print("Running 'src/server/server.py'...\n\n")
-        subprocess.run(["python", "src/server/server.py"])
+        print("Running 'server.js'...\n\n")
+        subprocess.run(["node", "server.js"])
     elif CHOICE == "help":
         print("\nAvailable commands:")
         print("(1) | Light   | CLIENT")
