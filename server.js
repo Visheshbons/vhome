@@ -17,9 +17,38 @@ const PORT = 8080;
 const HOST = "0.0.0.0";
 const wss = new WebSocketServer({ port: PORT, host: HOST });
 
-const speakerCount = 0;
-const cameraCount = 0;
-const lightCount = 0;
+let speakers = [];
+let cameras = [];
+let lights = [];
+let devices = [];
+
+class Device {
+    constructor(type, ws) {
+        this.type = type;
+        this.id = id;
+        this.ws = ws;
+
+        switch (type) {
+            case "speaker":
+                speakers.push(this);
+                devices.push(this);
+                this.id = `SPK-${speakers.length.toString().padStart(3, '0')}`;
+                break;
+            case "camera":
+                cameras.push(this);
+                devices.push(this);
+                this.id = `CAM-${cameras.length.toString().padStart(3, '0')}`;
+                break;
+            case "light":
+                lights.push(this);
+                devices.push(this);
+                this.id = `LGT-${lights.length.toString().padStart(3, '0')}`;
+                break;
+            default:
+                this.id = `DEV-000`;
+        }
+    }
+}
 
 // ---------- Helper Functions ---------- \\
 
@@ -40,21 +69,22 @@ function getServerIpAddress() {
   return ipAddress;
 }
 
-function createId(type) {
-    switch(type) {
-        case "speaker":
-            speakerCount++;
-            return `SPK-${speakerCount}`;
-        case "camera":
-            cameraCount++;
-            return `CAM-${cameraCount}`;
-        case "light":
-            lightCount++;
-            return `LGT-${lightCount}`;
-        default:
-            return `DEV-000`;
-    }
-}
+// Legacy ID creation
+// function createId(type) {
+//     switch(type) {
+//         case "speaker":
+//             speakerCount++;
+//             return `SPK-${speakerCount}`;
+//         case "camera":
+//             cameraCount++;
+//             return `CAM-${cameraCount}`;
+//         case "light":
+//             lightCount++;
+//             return `LGT-${lightCount}`;
+//         default:
+//             return `DEV-000`;
+//     }
+// }
 
 
 
@@ -67,7 +97,14 @@ wss.on('connection', (ws, req) => {
         try {
             const data = JSON.parse(msg);
             if (data.type === "register") {
-                // w.i.p.
+                new Device(data.deviceType, ws);
+                console.log(`
+                    Registered new 
+                    ${chalk.grey(data.deviceType)}: 
+                    [${chalk.green(
+                        devices[devices.length - 1].id
+                    )}]
+                `);
             }
         } catch (err) {
             console.error('Error parsing message:', err);
