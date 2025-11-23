@@ -114,41 +114,38 @@ wss.on('connection', (ws, req) => {
         }
     });
     
-    ws.on('close', (msg) => {
+    ws.on('close', () => { // Parameter changed from '(msg)' to '()'
         try {
-            const data = JSON.parse(msg);
+            // Find the device associated with this specific WebSocket connection
+            const deviceIndex = devices.findIndex(d => d.ws === ws);
 
-            // Find and device from lists
-            const deviceIndex = devices.findIndex(device => device.ws === ws);
             if (deviceIndex !== -1) {
                 const device = devices[deviceIndex];
+                const type = device.type;
+
+                // Remove from type-specific list
+                switch (type) {
+                    case "speaker":
+                        speakers = speakers.filter(dev => dev.ws !== ws);
+                        break;
+                    case "camera":
+                        cameras = cameras.filter(dev => dev.ws !== ws);
+                        break;
+                    case "light":
+                        lights = lights.filter(dev => dev.ws !== ws);
+                        break;
+                }
+
+                // Remove from general devices list
+                devices = devices.filter(dev => dev.ws !== ws);
+
+                console.log(`Disconnected ${chalk.grey(type)}: [${chalk.red(device.id)}]`);
+            } else {
+                console.log(`An unknown client disconnected from ${req.socket.remoteAddress}`);
             }
-            const type = device.type;
-
-            // Remove from type-specific list
-            switch (type) {
-                case "speaker":
-                    speakers = speakers.filter(dev => dev.ws !== ws);
-                    break;
-                case "camera":
-                    cameras = cameras.filter(dev => dev.ws !== ws);
-                    break;
-                case "light":
-                    lights = lights.filter(dev => dev.ws !== ws);
-                    break;
-            }
-
-            // Remove from general devices list
-            devices = devices.filter(dev => dev.ws !== ws);
-
-            console.log(`
-                Disconnected 
-                ${chalk.grey(type)}: 
-                [${chalk.red(device.id)}]
-            `);
-
 
         } catch (err) {
+            // This catch block handles errors within the close handler itself
             console.error(`Error handling disconnection: ${chalk.red(err)}`);
         }
     });
