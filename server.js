@@ -25,7 +25,6 @@ let devices = [];
 class Device {
     constructor(type, ws) {
         this.type = type;
-        this.id = id;
         this.ws = ws;
 
         switch (type) {
@@ -98,13 +97,17 @@ wss.on('connection', (ws, req) => {
             const data = JSON.parse(msg);
             if (data.type === "register") {
                 new Device(data.deviceType, ws);
-                console.log(`
-                    Registered new 
-                    ${chalk.grey(data.deviceType)}: 
-                    [${chalk.green(
-                        devices[devices.length - 1].id
-                    )}]
-                `);
+                console.log(`Registered new ${
+                    chalk.grey(data.deviceType)
+                }: [${
+                    chalk.green(devices[devices.length - 1].id)
+                }]`);
+                ws.send(
+                    JSON.stringify({ 
+                        type: "registered", 
+                        Id: devices[devices.length - 1].id 
+                    })
+                );
             }
         } catch (err) {
             console.error('Error parsing message:', err);
