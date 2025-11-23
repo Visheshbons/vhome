@@ -84,6 +84,34 @@ function getServerIpAddress() {
 //     }
 // }
 
+let pendingSpeakerRequest = null;
+function handleIoTMessage(data, originDevice) {
+  // Handles messages (e.g., "lightOn" / "lightOff" from smart speaker)
+  const cmd = data.request;
+  if (!originDevice || originDevice.type !== 'speaker') {
+    console.log(chalk.yellow('Request received from non-speaker device, ignoring.'));
+    return;
+  }
+  pendingSpeakerRequest = { ws: originDevice.ws, command: cmd };
+  switch (cmd) {
+    case "lightOn":
+      console.log(`Speaker ${chalk.green(originDevice.id)} requested to turn lights ON`);
+      lights.forEach(light => {
+        light.ws.send(JSON.stringify({ type: "request", request: "on" }));
+      });
+      break;
+    case "lightOff":
+      console.log(`Speaker ${chalk.green(originDevice.id)} requested to turn lights OFF`);
+      lights.forEach(light => {
+        light.ws.send(JSON.stringify({ type: "request", request: "off" }));
+      });
+      break;
+    default:
+      console.log(`Unknown command received: ${chalk.red(cmd)}`);
+      pendingSpeakerRequest = null;
+  }
+}
+
 
 
 // ---------- Server Routes ---------- \\
@@ -92,27 +120,38 @@ function setupServerEvents(wss) {
     wss.on('connection', (ws, req) => {
         console.log(`New connection from ${req.socket.remoteAddress}`);
 
-        ws.on('message', (msg) => {
-            try {
-                const data = JSON.parse(msg);
-                if (data.type === "register") {
-                    new Device(data.deviceType, ws);
-                    console.log(`Registered new ${
-                        chalk.grey(data.deviceType)
-                    }: [${
-                        chalk.green(devices[devices.length - 1].id)
-                    }]`);
-                    ws.send(
-                        JSON.stringify({ 
-                            type: "registered", 
-                            Id: devices[devices.length - 1].id 
-                        })
-                    );
-                }
-            } catch (err) {
-                console.error('Error parsing message:', err);
-            }
-        });
+                ws.on('message', (msg) => {
+                    try {
+                        const data = JSON.parse(msg);
+                        if (data.type === "register") {
+                            const device = new Device(data.deviceType, ws);
+                            console.log(`Registered new ${chalk.grey(data.deviceType)}: [${chalk.green(device.id)}]`);
+                            ws.send(JSON.stringify({ type: "registered", Id: device.id }));
+                        } else if (data.type === "request") {
+                            // Find originating device for logging/context
+                            const origin = devices.find(d => d.ws === ws);
+                            handleIoTMessage(data, origin);
+                        } else if (data.type === "status") {
+                            // Status from light; confirm back to pending speaker
+                            if (pendingSpeakerRequest) {
+                                const { ws: speakerWs, command } = pendingSpeakerRequest;
+                                try {
+                                    speakerWs.send(JSON.stringify({
+                                        type: 'confirmed',
+                                        request: command,
+                                        status: data.status
+                                    }));
+                                } catch (e) {
+                                    console.error('Error sending confirmation to speaker:', e);
+                                } finally {
+                                    pendingSpeakerRequest = null;
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error parsing/handling message:', err);
+                    }
+                });
 
         ws.on('close', () => {
             try {
