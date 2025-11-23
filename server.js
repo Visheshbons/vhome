@@ -15,7 +15,6 @@ import { dirname, extname } from "path";
 
 const PORT = 5000;
 const HOST = "0.0.0.0";
-const wss = new WebSocketServer({ port: PORT, host: HOST });
 
 let speakers = [];
 let cameras = [];
@@ -89,73 +88,92 @@ function getServerIpAddress() {
 
 // ---------- Server Routes ---------- \\
 
-wss.on('connection', (ws, req) => {
-    console.log(`New connection from ${req.socket.remoteAddress}`);
+function setupServerEvents(wss) {
+    wss.on('connection', (ws, req) => {
+        console.log(`New connection from ${req.socket.remoteAddress}`);
 
-    ws.on('message', (msg) => {
-        try {
-            const data = JSON.parse(msg);
-            if (data.type === "register") {
-                new Device(data.deviceType, ws);
-                console.log(`Registered new ${
-                    chalk.grey(data.deviceType)
-                }: [${
-                    chalk.green(devices[devices.length - 1].id)
-                }]`);
-                ws.send(
-                    JSON.stringify({ 
-                        type: "registered", 
-                        Id: devices[devices.length - 1].id 
-                    })
-                );
-            }
-        } catch (err) {
-            console.error('Error parsing message:', err);
-        }
-    });
-    
-    ws.on('close', () => { // Parameter changed from '(msg)' to '()'
-        try {
-            // Find the device associated with this specific WebSocket connection
-            const deviceIndex = devices.findIndex(d => d.ws === ws);
-
-            if (deviceIndex !== -1) {
-                const device = devices[deviceIndex];
-                const type = device.type;
-
-                // Remove from type-specific list
-                switch (type) {
-                    case "speaker":
-                        speakers = speakers.filter(dev => dev.ws !== ws);
-                        break;
-                    case "camera":
-                        cameras = cameras.filter(dev => dev.ws !== ws);
-                        break;
-                    case "light":
-                        lights = lights.filter(dev => dev.ws !== ws);
-                        break;
+        ws.on('message', (msg) => {
+            try {
+                const data = JSON.parse(msg);
+                if (data.type === "register") {
+                    new Device(data.deviceType, ws);
+                    console.log(`Registered new ${
+                        chalk.grey(data.deviceType)
+                    }: [${
+                        chalk.green(devices[devices.length - 1].id)
+                    }]`);
+                    ws.send(
+                        JSON.stringify({ 
+                            type: "registered", 
+                            Id: devices[devices.length - 1].id 
+                        })
+                    );
                 }
-
-                // Remove from general devices list
-                devices = devices.filter(dev => dev.ws !== ws);
-
-                console.log(`Disconnected ${chalk.grey(type)}: [${chalk.red(device.id)}]`);
-            } else {
-                console.log(`An unknown client disconnected from ${req.socket.remoteAddress}`);
+            } catch (err) {
+                console.error('Error parsing message:', err);
             }
+        });
 
-        } catch (err) {
-            // This catch block handles errors within the close handler itself
-            console.error(`Error handling disconnection: ${chalk.red(err)}`);
-        }
+        ws.on('close', () => {
+            try {
+                const deviceIndex = devices.findIndex(d => d.ws === ws);
+
+                if (deviceIndex !== -1) {
+                    const device = devices[deviceIndex];
+                    const type = device.type;
+
+                    switch (type) {
+                        case "speaker": speakers = speakers.filter(dev => dev.ws !== ws); break;
+                        case "camera": cameras = cameras.filter(dev => dev.ws !== ws); break;
+                        case "light": lights = lights.filter(dev => dev.ws !== ws); break;
+                    }
+
+                    devices = devices.filter(dev => dev.ws !== ws);
+
+                    console.log(`Disconnected ${chalk.grey(type)}: [${chalk.red(device.id)}]`);
+                } else {
+                    console.log(`An unknown client disconnected from ${req.socket.remoteAddress}`);
+                }
+            } catch (err) {
+                console.error(`Error handling disconnection: ${chalk.red(err)}`);
+            }
+        });
     });
-})
+}
 
 
 
 // ---------- Start Server ---------- \\
 
-wss.on('listening', () => {
-    console.log(`WebSocket server running on port ${chalk.green(PORT)}`);
-    console.log(`Network at "ws://${getServerIpAddress()}:${PORT}"\n`);
-})
+function startWebSocketServer(port) {
+    return new Promise((resolve, reject) => {
+        const server = new WebSocketServer({ port, host: HOST });
+
+        server.on("listening", () => {
+            resolve({ server, port });
+        });
+
+        server.on("error", (err) => {
+            if (err.code === "EADDRINUSE") {
+                console.log(chalk.yellow(`Port ${port} is in use, retrying on ${port + 1}...`));
+                resolve(startWebSocketServer(port + 1)); // recursive retry
+            } else {
+                reject(err);
+            }
+        });
+    });
+}
+
+let wss;  // must be declared but NOT assigned
+
+startWebSocketServer(PORT).then(({ server, port }) => {
+    wss = server;
+
+    console.log(`WebSocket server running on port ${chalk.green(port)}`);
+    console.log(`Network at "ws://${getServerIpAddress()}:${port}"\n`);
+
+    setupServerEvents(wss);
+
+}).catch(err => {
+    console.error("Failed to start WebSocket server:", err);
+});

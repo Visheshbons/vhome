@@ -37,5 +37,7 @@ def loop():
         print("\nInvalid choice")
         loop()
 
-
-loop()
+try:
+    loop()
+except KeyboardInterrupt:
+    print("\nProccess terminated by user.\n")
