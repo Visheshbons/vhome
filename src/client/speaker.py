@@ -1,9 +1,12 @@
 import websockets
 import json
 import asyncio
+import speech_recognition as sr
+import time
 
 SERVER_URL = "ws://localhost:5000"
 speakerId = ""
+recognizer = sr.Recognizer()
 
 
 async def handle_server_messages(websocket, registered_event, confirmation_event):
@@ -30,7 +33,34 @@ async def handle_server_messages(websocket, registered_event, confirmation_event
             confirmation_event.set()  # Unblock prompt
         else:
             print("[SERVER MESSAGE]:", data)
+        
+    
 
+def listen_for_command():
+    """
+    Listens for audio input from the microphone and attempts to transcribe it.
+    This is a blocking function intended to run in a separate thread/executor.
+    """
+    with sr.Microphone() as source:
+        print("Listening for a command (say 'light on', 'light off', or 'exit')...")
+        recognizer.adjust_for_ambient_noise(source)
+        try:
+            audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
+            print("Processing audio...")
+            # Use Google Web Speech API for recognition
+            command = recognizer.recognize_google(audio).strip().lower()
+            return command
+        except sr.UnknownValueError:
+            print("Could not understand audio. Please try again.")
+            return None
+        except sr.RequestError as e:
+            print(f"Error connecting to Google Speech API; check internet connection. {e}")
+            return None
+        except sr.WaitTimeoutError:
+            # Silence detected within the timeout
+            return None
+
+    
 
 async def prompt_loop(websocket, registered_event, confirmation_event):
     global speakerId
@@ -38,9 +68,15 @@ async def prompt_loop(websocket, registered_event, confirmation_event):
     loop = asyncio.get_event_loop()
     while True:
         await confirmation_event.wait()  # wait for previous confirmation
-        prompt = await loop.run_in_executor(None, input, "Command (light on/off, exit): ")
+        
+        # Use run_in_executor to run the blocking voice recognition function asynchronously
+        prompt = await loop.run_in_executor(None, listen_for_command)
+        
         if prompt is None:
             continue
+        
+        print(f"Heard command: '{prompt}'")
+
         p = prompt.strip().lower()
         if p in ("exit", "quit"):
             print("Exiting prompt loop...")
@@ -68,6 +104,8 @@ async def prompt_loop(websocket, registered_event, confirmation_event):
             print("Unknown command. Use 'light on', 'light off', or 'exit'.")
 
 
+# --- Main Function (remains unchanged) ---
+
 async def main():
     async with websockets.connect(SERVER_URL) as websocket:
         register_msg = {"type": "register", "deviceType": "speaker"}
@@ -94,6 +132,7 @@ async def main():
 
 if __name__ == "__main__":
     print("Speaker: STARTED")
+    # Ensure necessary libraries are installed: pip install SpeechRecognition websockets pyaudio
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
